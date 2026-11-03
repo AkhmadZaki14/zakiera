@@ -95,6 +95,28 @@ end
 -- ── POST status ───────────────────────────────────────────────
 local lastPx, lastPy = -1, -1
 local lastTileInfo = "[]"
+local lastInvJson  = "[]"
+local invTick      = 0
+
+local function BuildInvJson()
+    local arr = {}
+    pcall(function()
+        local inv = GetInventory()
+        if not inv then return end
+        for _, item in pairs(inv) do
+            if item.id and item.amount and item.amount > 0 then
+                local name = ""
+                pcall(function()
+                    local info = GetItemInfo(item.id)
+                    if info and info.name then name = info.name end
+                end)
+                arr[#arr+1] = string.format('{"id":%d,"name":"%s","amount":%d}',
+                    item.id, JsonEsc(name), item.amount)
+            end
+        end
+    end)
+    return "[" .. table.concat(arr, ",") .. "]"
+end
 
 local function PostStatus()
     local me = GetLocal and GetLocal()
@@ -119,10 +141,16 @@ local function PostStatus()
         lastTileInfo = BuildTileInfo(px, py)
         lastPx, lastPy = px, py
     end
+    -- rebuild inventory tiap 5 detik (tiap 5 tick × 1s)
+    invTick = invTick + 1
+    if invTick >= 5 then
+        lastInvJson = BuildInvJson()
+        invTick = 0
+    end
     local bid = GetBotId()
     local body = string.format(
-        '{"x":%d,"y":%d,"world":"%s","status":"Online","level":%d,"gems":%d,"uptime":0,"botId":"%s","tileInfo":%s}',
-        px, py, JsonEsc(world), lvl, gems, JsonEsc(bid), lastTileInfo)
+        '{"x":%d,"y":%d,"world":"%s","status":"Online","level":%d,"gems":%d,"uptime":0,"botId":"%s","tileInfo":%s,"inventory":%s}',
+        px, py, JsonEsc(world), lvl, gems, JsonEsc(bid), lastTileInfo, lastInvJson)
     pcall(MakeRequest, ZAKIERA_URL .. "/api/status", "POST", MakeHeaders(), body)
 end
 

@@ -12,7 +12,7 @@ app.use(express.static(PUBLIC_DIR));
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 // ── State ─────────────────────────────────────────────────────
-const bots   = {};  // { botId: { x,y,world,status,level,gems,uptime,updatedAt } }
+const bots   = {};  // { botId: { x,y,world,status,level,gems,uptime,updatedAt,inventory,tileInfo } }
 const queues = {};  // { botId: [ {id,type,payload,createdAt} ] }
 let cmdId = 1;
 
@@ -35,6 +35,8 @@ app.post('/api/status', (req, res) => {
     gems:   typeof b.gems   === 'number' ? b.gems   : (prev.gems   || 0),
     uptime: typeof b.uptime === 'number' ? b.uptime : (prev.uptime || 0),
     updatedAt: Date.now(),
+    inventory: Array.isArray(b.inventory) ? b.inventory : (prev.inventory || []),
+    tileInfo:  Array.isArray(b.tileInfo)  ? b.tileInfo  : (prev.tileInfo  || []),
   };
   if (!queues[id]) queues[id] = [];
   res.json({ ok: true });
