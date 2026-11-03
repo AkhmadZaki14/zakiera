@@ -5,7 +5,7 @@
 --  API List: io, MakeRequest
 -- ============================================================
 
-local ZAKIERA_URL      = "https://cdf9-118-99-118-190.ngrok-free.app"
+local ZAKIERA_URL      = "https://ceaf-118-99-118-190.ngrok-free.app"
 local STATUS_INTERVAL  = 5000   -- 12/menit
 local COMMAND_INTERVAL = 3000   -- 20/menit
 local MAX_INV_ITEMS    = 50
