@@ -6,9 +6,9 @@ const path = require('path');
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-// fallback: serve index.html for root
-app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+const PUBLIC_DIR = path.join('/Users/macbookpro/orca/projects/zakiera', 'public');
+app.use(express.static(PUBLIC_DIR));
+app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 // ── State ────────────────────────────────────────────────────
 let botStatus = {
@@ -79,5 +79,5 @@ app.post('/api/command', (req, res) => {
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`zakiera running on http://localhost:${PORT}`));
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, '0.0.0.0', () => console.log(`zakiera running on http://localhost:${PORT}`));

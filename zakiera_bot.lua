@@ -4,9 +4,13 @@
 --  API List required: io, MakeRequest
 -- ============================================================
 
-local ZAKIERA_URL = "https://dd27-118-99-118-190.ngrok-free.app"
+local ZAKIERA_URL = "https://43dc-118-99-118-190.ngrok-free.app"
 
--- ── Util ──────────────────────────────────────────────────────
+local HEADERS = {
+    ["Content-Type"]                = "application/json",
+    ["ngrok-skip-browser-warning"]  = "1",
+    ["User-Agent"]                  = "ZakieraBot/1.0",
+}
 local function NowTime()
     local ok, t = pcall(os.time)
     return ok and t or 0
@@ -78,15 +82,16 @@ local function PostStatus()
         '{"x":%d,"y":%d,"world":"%s","status":"Online","level":%d,"gems":%d,"uptime":0}',
         px, py, JsonEsc(world), lvl, gems)
 
-    pcall(MakeRequest, ZAKIERA_URL .. "/api/status", "POST",
-        { ["Content-Type"] = "application/json" }, body)
+    pcall(MakeRequest, ZAKIERA_URL .. "/api/status", "POST", HEADERS, body)
 end
 
 -- ── Command GET & exec ────────────────────────────────────────
 local function FetchAndExec()
-    local ok, body = pcall(MakeRequest, ZAKIERA_URL .. "/api/command", "GET", {}, "")
-    if not ok or type(body) ~= "string" or body == "" then return end
-
+    local ok, resp = pcall(MakeRequest, ZAKIERA_URL .. "/api/command", "GET", HEADERS, "")
+    if not ok then return end
+    local body = type(resp) == "table" and resp.content or resp
+    if type(body) ~= "string" or body == "" then return end
+    Log("CMD body: " .. body:sub(1, 80))
     for block in body:gmatch('%{[^{}]+%}') do
         local t     = block:match('"type"%s*:%s*"([^"]+)"')
         local px    = tonumber(block:match('"x"%s*:%s*(%-?%d+)'))
