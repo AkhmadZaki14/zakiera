@@ -113,7 +113,9 @@ const EP = {
 const POLL_MS = 300;
 
 let bots = [], sel = null;
-let pend = {};            // botId -> { x, y, t }  target tertunda, supaya spam klik menumpuk dari target, bukan dari posisi lama
+// pend[botId] = { x, y } — target terakhir yang dikirim
+// TIDAK pakai expire waktu — expire hanya kalau bot sudah sampai di target
+let pend = {};
 const $ = id => document.getElementById(id);
 const hdr = { 'Content-Type':'application/json', 'ngrok-skip-browser-warning':'1' };
 
@@ -132,12 +134,15 @@ async function send(bot, type, payload){
   }catch(e){ log('Gagal kirim ' + type + ' ke ' + bot.id, true); }
 }
 
-// Gerak: target dihitung dari target tertunda jika masih baru (<2 dtk), jadi 5x klik = 5 tile
+// Gerak: base = pending target kalau ada, kalau tidak = posisi live bot
+// Pending TIDAK expire by time — hanya clear saat bot sudah sampai (cek di render)
 function move(dx, dy){
   targets().forEach(b => {
-    const p = pend[b.id], base = (p && Date.now() - p.t < 2000) ? p : b;
+    const p = pend[b.id];
+    // pakai pending kalau ada, kalau tidak pakai posisi live
+    const base = p || b;
     const x = base.x + dx, y = base.y + dy;
-    pend[b.id] = { x, y, t: Date.now() };
+    pend[b.id] = { x, y };
     send(b, 'move', { x, y, safe: $('cfg-safe').checked, modfly: $('cfg-modfly').checked });
     log(b.id + ' jalan ke (' + x + ',' + y + ')');
   });
@@ -173,11 +178,19 @@ function render(){
     $('ps').textContent = b.x + ', ' + b.y;
     $('lv').textContent = b.level || '-';
     $('gm').textContent = b.gems ? b.gems.toLocaleString('id-ID') : '-';
-    const p = pend[b.id], fresh = p && Date.now() - p.t < 2000;
+
+    // Clear pending kalau bot sudah sampai di target
+    const p = pend[b.id];
+    if(p && b.x === p.x && b.y === p.y) delete pend[b.id];
+
+    // Grid: pakai pending sebagai base kalau ada, posisi live kalau tidak
+    const base = pend[b.id] || b;
     document.querySelectorAll('.cell').forEach(c => {
       const dx = +c.dataset.dx, dy = +c.dataset.dy;
-      c.textContent = (b.x + dx) + ',' + (b.y + dy);
-      c.classList.toggle('pend', !!(fresh && p.x === b.x+dx && p.y === b.y+dy));
+      c.textContent = (base.x + dx) + ',' + (base.y + dy);
+      // highlight cell target pending
+      const isPend = !!(pend[b.id] && pend[b.id].x === b.x+dx && pend[b.id].y === b.y+dy);
+      c.classList.toggle('pend', isPend);
     });
   }
 }
