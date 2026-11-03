@@ -105,7 +105,7 @@ button:hover{border-color:var(--ac)}button:active{background:var(--ac);color:#ff
 
 <script>
 // ====== Sesuaikan endpoint dengan server.js ======
-const API = 'http://127.0.0.1:3001';                    // kalau dibuka dari file lokal, ganti ke URL server
+const API = 'https://zakiera.vercel.app';                    // kalau dibuka dari file lokal, ganti ke URL server
 const EP = {
   bots:    () => API + '/api/bots',             // GET  -> { bots:[{id,x,y,world,status,level,gems,online}] }
   command: () => API + '/api/command'           // POST -> { botId, type, payload }
