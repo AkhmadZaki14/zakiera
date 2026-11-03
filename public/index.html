@@ -1,423 +1,199 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ZAKIERA — GT Bot Control</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zakiera</title>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg0:#0b0b0f;--bg1:#111118;--bg2:#18181f;--bg3:#1e1e28;
-  --border:#2a2a38;--accent:#5b6af0;--accent2:#7c89ff;
-  --green:#3ecf8e;--red:#f05b5b;--yellow:#f0c65b;--orange:#f07c3e;
-  --text:#d4d4e0;--dim:#6b6b80;--radius:6px;
-}
-html,body{height:100%;background:var(--bg0);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px}
-
-/* ── Layout ── */
-.app{display:grid;grid-template-columns:270px 1fr;grid-template-rows:48px 1fr;height:100vh}
-.header{grid-column:1/-1;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:10px}
-.header-logo{font-size:16px;font-weight:700;color:var(--accent2);letter-spacing:1px}
-.header-badge{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;background:rgba(240,91,91,.15);color:var(--red);border:1px solid rgba(240,91,91,.3);transition:all .3s}
-.header-badge.online{background:rgba(62,207,142,.15);color:var(--green);border-color:rgba(62,207,142,.3)}
-.header-world{color:var(--dim);font-size:12px}
-.header-world span{color:var(--text);font-weight:600}
-
-/* Bot selector */
-.bot-tabs{display:flex;gap:4px;margin-left:auto;align-items:center}
-.bot-tab{padding:4px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--dim);transition:all .2s}
-.bot-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.bot-tab.online-dot::before{content:'●';color:var(--green);margin-right:4px;font-size:8px}
-.bot-tab.offline-dot::before{content:'●';color:var(--red);margin-right:4px;font-size:8px}
-
-.sidebar{background:var(--bg1);border-right:1px solid var(--border);padding:12px;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
-.main{padding:12px;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
-
-/* ── Cards ── */
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:10px}
-.card-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);margin-bottom:8px}
-
-/* ── Stats ── */
-.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-.stat-item{background:var(--bg3);border-radius:4px;padding:7px 9px}
-.stat-label{font-size:10px;color:var(--dim);margin-bottom:2px}
-.stat-value{font-size:14px;font-weight:700;color:var(--text)}
-.stat-value.accent{color:var(--accent2)}
-.stat-value.green{color:var(--green)}
-.stat-value.yellow{color:var(--yellow)}
-
-/* ── Coord bar ── */
-.coord-bar{display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 10px;background:var(--bg3);border-radius:4px;font-size:12px;color:var(--dim)}
-.coord-bar .cv{font-weight:700;color:var(--accent2);font-size:14px}
-
-/* ── D-pad ── */
-.dpad{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:3px}
-.dpad-btn{background:var(--bg3);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .1s,transform .1s;user-select:none}
-.dpad-btn:hover{background:var(--bg1);border-color:var(--accent)}
-.dpad-btn:active{transform:scale(.92);background:rgba(91,106,240,.2)}
-.dpad-btn.empty{background:transparent;border:none;cursor:default}
-.dpad-btn.use-btn{font-size:10px;font-weight:700;color:var(--yellow);border-color:rgba(240,198,91,.3)}
-
-/* ── 5x5 Grid ── */
-.grid-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
-.tile-grid{display:grid;grid-template-columns:repeat(5,46px);grid-template-rows:repeat(5,46px);gap:3px}
-.tile{background:var(--bg3);border:1px solid var(--border);border-radius:4px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8px;color:var(--dim);transition:background .1s,border-color .1s;user-select:none;position:relative}
-.tile:hover:not(.center){background:var(--bg1);border-color:var(--accent);color:var(--accent2)}
-.tile.center{background:rgba(91,106,240,.2);border:2px solid var(--accent);color:var(--accent2);font-weight:700;font-size:14px;cursor:default}
-.tile.targeted{background:rgba(62,207,142,.15);border-color:var(--green);color:var(--green)}
-.tile.blocked{background:rgba(240,91,91,.1);border-color:rgba(240,91,91,.4);color:var(--red);cursor:not-allowed}
-.tile.blocked:hover{background:rgba(240,91,91,.15)}
-.tile .coord{font-size:7px;line-height:1.2;text-align:center;opacity:.7}
-.tile .safe-icon{font-size:9px;position:absolute;top:2px;right:3px}
-
-/* ── Warp / input ── */
-.warp-row{display:flex;gap:6px}
-.warp-row input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:12px;text-transform:uppercase;outline:none}
-.warp-row input:focus{border-color:var(--accent)}
-.warp-row input::placeholder{color:var(--dim);text-transform:none}
-
-/* ── Buttons ── */
-.btn{padding:7px 12px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:opacity .1s,transform .1s;white-space:nowrap}
-.btn:active{transform:scale(.96)}
-.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{opacity:.85}
-.btn-danger{background:var(--red);color:#fff}.btn-danger:hover{opacity:.85}
-.btn-success{background:var(--green);color:#000}.btn-success:hover{opacity:.85}
-.btn-ghost{background:var(--bg3);border:1px solid var(--border);color:var(--text)}.btn-ghost:hover{border-color:var(--accent)}
-.btn-full{width:100%}
-.btn-row{display:flex;gap:6px}
-.btn-row .btn{flex:1}
-
-/* ── Log ── */
-.log-box{background:var(--bg0);border:1px solid var(--border);border-radius:4px;padding:8px;height:130px;overflow-y:auto;font-family:monospace;font-size:11px;color:var(--dim);line-height:1.5}
-.log-ok{color:var(--green)}.log-err{color:var(--red)}.log-cmd{color:var(--accent2)}.log-warn{color:var(--yellow)}
-
-/* ── Safety toast ── */
-.toast{position:fixed;bottom:16px;right:16px;background:var(--red);color:#fff;padding:8px 14px;border-radius:6px;font-size:12px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999}
-.toast.show{opacity:1}
-
-@keyframes flash{0%,100%{opacity:1}50%{opacity:.4}}
-.flashing{animation:flash .4s ease}
-::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+:root{--bg:#0e0e11;--p:#16161b;--p2:#1d1d24;--bd:#2a2a33;--tx:#e8e8ee;--mu:#8a8a98;--ac:#7c83ff;--ok:#4ade80;--er:#f87171;--wa:#fbbf24}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--tx);font:14px/1.4 Inter,system-ui,sans-serif;display:grid;grid-template-columns:230px 1fr;gap:10px;padding:10px}
+h2{font-size:13px;font-weight:600;margin-bottom:8px}
+.panel{background:var(--p);border:1px solid var(--bd);border-radius:6px;padding:10px}
+.side{display:flex;flex-direction:column;gap:8px}
+#list{flex:1;overflow:auto;min-height:160px}
+.bot{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer}
+.bot:hover{background:var(--p2)}.bot.sel{background:var(--p2);outline:1px solid var(--ac)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mu);flex:none}.dot.on{background:var(--ok)}
+.bot small{color:var(--mu);margin-left:auto}
+input[type=text]{width:100%;background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:7px 9px;border-radius:4px;font:inherit}
+button{background:var(--p2);border:1px solid var(--bd);color:var(--tx);padding:7px 12px;border-radius:4px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--ac)}button:active{background:var(--ac);color:#fff}
+.main{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto 1fr;gap:10px;min-width:0}
+.row{display:flex;gap:6px;margin-top:8px}
+.kv{display:grid;grid-template-columns:90px 1fr;row-gap:3px}.kv span:nth-child(odd){color:var(--mu)}
+.pill{padding:1px 8px;border-radius:10px;background:var(--p2);font-size:12px}
+.pill.on{color:var(--ok)}.pill.off{color:var(--er)}
+.dpad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,48px);gap:6px;justify-content:center}
+.dpad button{height:100%}
+.grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;max-width:300px;margin:0 auto}
+.cell{aspect-ratio:1;font-size:11px;color:var(--mu)}
+.cell.me{background:var(--ac);color:#fff;border-color:var(--ac)}
+.cell.pend{outline:2px solid var(--wa)}
+.chk{display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer}
+.chk input{accent-color:var(--ac)}
+#log{grid-column:1/3;overflow:auto;font:12px ui-monospace,Menlo,monospace;color:var(--mu);min-height:120px;max-height:220px}
+#log div{padding:1px 0}#log .e{color:var(--er)}
+@media(max-width:760px){body{grid-template-columns:1fr}.main{grid-template-columns:1fr}#log{grid-column:auto}}
 </style>
 </head>
 <body>
-<div class="app">
-
-  <!-- HEADER -->
-  <header class="header">
-    <div class="header-logo">⚡ ZAKIERA</div>
-    <div class="header-badge" id="online-badge">OFFLINE</div>
-    <div class="header-world">World: <span id="hdr-world">—</span></div>
-    <div class="bot-tabs" id="bot-tabs"></div>
-  </header>
-
-  <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="card">
-      <div class="card-title">Bot Stats</div>
-      <div class="stats-grid">
-        <div class="stat-item"><div class="stat-label">Status</div><div class="stat-value" id="stat-status">—</div></div>
-        <div class="stat-item"><div class="stat-label">World</div><div class="stat-value accent" id="stat-world">—</div></div>
-        <div class="stat-item"><div class="stat-label">Level</div><div class="stat-value yellow" id="stat-level">—</div></div>
-        <div class="stat-item"><div class="stat-label">Gems</div><div class="stat-value green" id="stat-gems">—</div></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Live Position</div>
-      <div class="coord-bar">X&nbsp;<span class="cv" id="live-x">—</span>&nbsp;/&nbsp;Y&nbsp;<span class="cv" id="live-y">—</span></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">D-Pad Movement</div>
-      <div style="display:flex;justify-content:center">
-        <div class="dpad">
-          <div class="dpad-btn empty"></div>
-          <div class="dpad-btn" id="btn-up"    onclick="dpad(0,-1)">▲</div>
-          <div class="dpad-btn empty"></div>
-          <div class="dpad-btn" id="btn-left"  onclick="dpad(-1,0)">◄</div>
-          <div class="dpad-btn use-btn"         onclick="sendCmd('use',{})">USE</div>
-          <div class="dpad-btn" id="btn-right"  onclick="dpad(1,0)">►</div>
-          <div class="dpad-btn empty"></div>
-          <div class="dpad-btn" id="btn-down"   onclick="dpad(0,1)">▼</div>
-          <div class="dpad-btn empty"></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Warp to World</div>
-      <div class="warp-row">
-        <input id="warp-input" type="text" placeholder="World name..." maxlength="24"
-               onkeydown="if(event.key==='Enter')sendWarp()"/>
-        <button class="btn btn-primary" onclick="sendWarp()">GO</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Session</div>
-      <div class="btn-row">
-        <button class="btn btn-success" onclick="sendCmd('connect',{})">Connect</button>
-        <button class="btn btn-danger"  onclick="sendCmd('disconnect',{})">Disconnect</button>
-      </div>
-    </div>
-  </aside>
-
-  <!-- MAIN -->
-  <main class="main">
-    <div class="card">
-      <div class="card-title">5×5 Path Grid — klik tile untuk gerak <span id="grid-safety-label" style="color:var(--dim);font-size:10px;margin-left:8px"></span></div>
-      <div class="grid-wrap">
-        <div class="tile-grid" id="tile-grid"></div>
-        <div style="font-size:10px;color:var(--dim)">
-          ● = bot &nbsp;|&nbsp; <span style="color:var(--red)">✗</span> = tidak bisa dilewati &nbsp;|&nbsp; <span style="color:var(--green)">✓</span> = aman
-        </div>
-      </div>
-    </div>
-
-    <div class="card" style="flex:1;display:flex;flex-direction:column">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div class="card-title" style="margin:0">Command Log</div>
-        <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="clearLog()">Clear</button>
-      </div>
-      <div class="log-box" id="log-box"></div>
-    </div>
-  </main>
+<div class="side">
+  <div class="panel" id="list"><h2>Bot</h2><div id="bots"></div></div>
+  <div class="panel">
+    <h2>Perintah ke semua bot</h2>
+    <label class="chk"><input type="checkbox" id="all"> Kirim ke semua bot online</label>
+  </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="main">
+  <div class="panel">
+    <h2 id="title">Belum ada bot dipilih</h2>
+    <div class="kv">
+      <span>Status</span><span id="st">-</span>
+      <span>World</span><span id="wd">-</span>
+      <span>Posisi</span><span id="ps">-</span>
+      <span>Level</span><span id="lv">-</span>
+      <span>Gems</span><span id="gm">-</span>
+    </div>
+    <div class="row"><input type="text" id="world" placeholder="Nama world"><button id="warp">Warp</button></div>
+    <div class="row"><button id="conn">Connect</button><button id="disc">Disconnect</button></div>
+  </div>
+
+  <div class="panel">
+    <h2>Gerak (tombol panah atau WASD juga bisa)</h2>
+    <div class="dpad">
+      <span></span><button data-d="0,-1">Atas</button><span></span>
+      <button data-d="-1,0">Kiri</button><button id="use">Pakai</button><button data-d="1,0">Kanan</button>
+      <span></span><button data-d="0,1">Bawah</button><span></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Pengaturan</h2>
+    <label class="chk"><input type="checkbox" id="cfg-modfly" checked> Modfly (wajib aktif)</label>
+    <label class="chk"><input type="checkbox" id="cfg-rec"> Auto reconnect</label>
+    <label class="chk"><input type="checkbox" id="cfg-safe" checked> Cek tile aman sebelum jalan</label>
+    <h2 style="margin-top:10px">Kecepatan polling</h2>
+    <div class="kv"><span>Web</span><span id="hz">-</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>Grid path 5x5 (klik tile untuk jalan, tengah = posisi bot)</h2>
+    <div class="grid5" id="grid"></div>
+  </div>
+
+  <div class="panel" id="log"></div>
+</div>
 
 <script>
-const BASE_URL  = 'http://127.0.0.1:3001';
-const POLL_MS   = 300;
+// ====== Sesuaikan endpoint dengan server.js ======
+const API = 'http://127.0.0.1:3001';                    // kalau dibuka dari file lokal, ganti ke URL server
+const EP = {
+  bots:    () => API + '/api/bots',             // GET  -> { bots:[{id,x,y,world,status,level,gems,online}] }
+  command: () => API + '/api/command'           // POST -> { botId, type, payload }
+};
+const POLL_MS = 300;
 
-// ── State ─────────────────────────────────────────────────────
-let activeBotId = 'bot1';
-let botX = 0, botY = 0;
-let lastTx = null, lastTy = null;
-let knownBots = {};
-// safetyMap[dx][dy] = true/false/null (null = unknown)
-let safetyMap = {};
+let bots = [], sel = null;
+let pend = {};            // botId -> { x, y, t }  target tertunda, supaya spam klik menumpuk dari target, bukan dari posisi lama
+const $ = id => document.getElementById(id);
+const hdr = { 'Content-Type':'application/json', 'ngrok-skip-browser-warning':'1' };
 
-// ── Bot tabs ──────────────────────────────────────────────────
-function renderBotTabs() {
-  const wrap = document.getElementById('bot-tabs');
-  wrap.innerHTML = '';
-  Object.values(knownBots).forEach(b => {
-    const btn = document.createElement('button');
-    btn.className = 'bot-tab ' + (b.online ? 'online-dot' : 'offline-dot') + (b.id === activeBotId ? ' active' : '');
-    btn.textContent = b.id;
-    btn.onclick = () => { activeBotId = b.id; renderBotTabs(); applyStatus(b); buildGrid(); };
-    wrap.appendChild(btn);
+function log(m, err){
+  const d = document.createElement('div'); if(err) d.className='e';
+  d.textContent = '[' + new Date().toLocaleTimeString('id-ID') + '] ' + m;
+  $('log').prepend(d); while($('log').children.length > 150) $('log').lastChild.remove();
+}
+const cur = () => bots.find(b => b.id === sel);
+const targets = () => $('all').checked ? bots.filter(b => b.online) : (cur() ? [cur()] : []);
+
+async function send(bot, type, payload){
+  try{
+    const r = await fetch(EP.command(), { method:'POST', headers:hdr, body:JSON.stringify({ botId:bot.id, type, payload:payload||{} }) });
+    if(!r.ok) throw new Error(r.status);
+  }catch(e){ log('Gagal kirim ' + type + ' ke ' + bot.id, true); }
+}
+
+// Gerak: target dihitung dari target tertunda jika masih baru (<2 dtk), jadi 5x klik = 5 tile
+function move(dx, dy){
+  targets().forEach(b => {
+    const p = pend[b.id], base = (p && Date.now() - p.t < 2000) ? p : b;
+    const x = base.x + dx, y = base.y + dy;
+    pend[b.id] = { x, y, t: Date.now() };
+    send(b, 'move', { x, y, safe: $('cfg-safe').checked, modfly: $('cfg-modfly').checked });
+    log(b.id + ' jalan ke (' + x + ',' + y + ')');
   });
+  render();
 }
 
-// ── 5x5 Grid ──────────────────────────────────────────────────
-function buildGrid() {
-  const grid = document.getElementById('tile-grid');
-  grid.innerHTML = '';
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 5; col++) {
-      const dx = col - 2, dy = row - 2;
-      const tile = document.createElement('div');
-      const isCenter = dx === 0 && dy === 0;
-      tile.className = 'tile' + (isCenter ? ' center' : '');
-      tile.id = `t_${dx}_${dy}`;
-
-      if (isCenter) {
-        tile.textContent = '●';
-        tile.title = `Bot: ${botX},${botY}`;
-      } else {
-        const coord = document.createElement('div');
-        coord.className = 'coord';
-        coord.id = `c_${dx}_${dy}`;
-        coord.textContent = `${botX+dx},${botY+dy}`;
-        tile.appendChild(coord);
-
-        const icon = document.createElement('div');
-        icon.className = 'safe-icon';
-        icon.id = `si_${dx}_${dy}`;
-        tile.appendChild(icon);
-
-        tile.onclick = () => clickTile(dx, dy);
-      }
-      grid.appendChild(tile);
-    }
-  }
-  updateGridCoords();
+// Grid 5x5
+const grid = $('grid');
+for(let dy=-2; dy<=2; dy++) for(let dx=-2; dx<=2; dx++){
+  const c = document.createElement('button');
+  c.className = 'cell' + (!dx && !dy ? ' me' : '');
+  c.dataset.dx = dx; c.dataset.dy = dy;
+  c.onclick = () => { if(dx||dy) move(dx, dy); };
+  grid.appendChild(c);
 }
 
-function updateGridCoords() {
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 5; col++) {
-      const dx = col-2, dy = row-2;
-      if (dx===0 && dy===0) {
-        const c = document.getElementById('t_0_0');
-        if (c) c.title = `Bot: ${botX},${botY}`;
-        continue;
-      }
-      const tx = botX+dx, ty = botY+dy;
-      const coord = document.getElementById(`c_${dx}_${dy}`);
-      if (coord) coord.textContent = `${tx},${ty}`;
+function render(){
+  const list = $('bots'); list.innerHTML = '';
+  bots.forEach(b => {
+    const d = document.createElement('div');
+    d.className = 'bot' + (b.id === sel ? ' sel' : '');
+    d.innerHTML = '<span class="dot ' + (b.online ? 'on' : '') + '"></span>' + b.id + '<small>' + b.x + ',' + b.y + '</small>';
+    d.onclick = () => { sel = b.id; render(); };
+    list.appendChild(d);
+  });
+  if(!list.children.length) list.innerHTML = '<div style="color:var(--mu)">Belum ada bot online. Jalankan zakiera_loader.lua di Bothax.</div>';
 
-      // safety indicator
-      const tile = document.getElementById(`t_${dx}_${dy}`);
-      const icon = document.getElementById(`si_${dx}_${dy}`);
-      const safe = safetyMap[`${tx},${ty}`];
-      if (tile) {
-        tile.classList.remove('blocked');
-        if (safe === false) {
-          tile.classList.add('blocked');
-          if (icon) icon.textContent = '✗';
-        } else if (safe === true) {
-          if (icon) icon.textContent = '✓';
-        } else {
-          if (icon) icon.textContent = '';
-        }
-      }
-    }
-  }
-}
-
-function clickTile(dx, dy) {
-  const tx = botX+dx, ty = botY+dy;
-  const safe = safetyMap[`${tx},${ty}`];
-  if (safe === false) {
-    showToast(`Tile (${tx},${ty}) tidak bisa dilewati!`);
-    log(`Tile (${tx},${ty}) BLOCKED — tidak dikirim`, 'log-warn');
-    return;
-  }
-  sendCmd('move', { x: tx, y: ty });
-  log(`Move → (${tx},${ty}) [dx:${dx>0?'+':''}${dx} dy:${dy>0?'+':''}${dy}]`, 'log-cmd');
-  // clear old target
-  if (lastTx !== null) {
-    const old = document.getElementById(`t_${lastTx}_${lastTy}`);
-    if (old) old.classList.remove('targeted');
-  }
-  const tile = document.getElementById(`t_${dx}_${dy}`);
-  if (tile && !tile.classList.contains('blocked')) tile.classList.add('targeted');
-  lastTx = dx; lastTy = dy;
-}
-
-// ── D-pad ──────────────────────────────────────────────────────
-function dpad(dx, dy) {
-  const tx = botX+dx, ty = botY+dy;
-  const safe = safetyMap[`${tx},${ty}`];
-  if (safe === false) { showToast(`Tile (${tx},${ty}) tidak bisa dilewati!`); return; }
-  sendCmd('move', { x: tx, y: ty });
-  log(`D-pad → (${tx},${ty})`, 'log-cmd');
-  const map = {'0,-1':'btn-up','0,1':'btn-down','-1,0':'btn-left','1,0':'btn-right'};
-  const el = document.getElementById(map[`${dx},${dy}`]);
-  if (el) { el.classList.add('flashing'); setTimeout(()=>el.classList.remove('flashing'),400); }
-}
-
-function sendWarp() {
-  const inp = document.getElementById('warp-input');
-  const w = (inp.value||'').trim().toUpperCase();
-  if (!w) return;
-  sendCmd('warp', { world: w });
-  log(`Warp → ${w}`, 'log-cmd');
-  inp.value = '';
-}
-
-// ── API ───────────────────────────────────────────────────────
-async function sendCmd(type, payload) {
-  try {
-    await fetch(`${BASE_URL}/api/command`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ type, payload, botId: activeBotId }),
+  const b = cur();
+  $('title').textContent = b ? b.id : 'Belum ada bot dipilih';
+  if(b){
+    $('st').innerHTML = '<span class="pill ' + (b.online ? 'on' : 'off') + '">' + (b.online ? 'Online' : 'Offline') + '</span>';
+    $('wd').textContent = b.world || '-';
+    $('ps').textContent = b.x + ', ' + b.y;
+    $('lv').textContent = b.level || '-';
+    $('gm').textContent = b.gems ? b.gems.toLocaleString('id-ID') : '-';
+    const p = pend[b.id], fresh = p && Date.now() - p.t < 2000;
+    document.querySelectorAll('.cell').forEach(c => {
+      const dx = +c.dataset.dx, dy = +c.dataset.dy;
+      c.textContent = (b.x + dx) + ',' + (b.y + dy);
+      c.classList.toggle('pend', !!(fresh && p.x === b.x+dx && p.y === b.y+dy));
     });
-  } catch(e) { log('Send error: '+e.message,'log-err'); }
-}
-
-async function pollBots() {
-  try {
-    const r = await fetch(`${BASE_URL}/api/bots`);
-    if (!r.ok) throw new Error(r.status);
-    const d = await r.json();
-    const prev = Object.keys(knownBots).length;
-    knownBots = {};
-    (d.bots||[]).forEach(b => knownBots[b.id] = b);
-    // auto-select first bot if none selected
-    if (!knownBots[activeBotId] && d.bots?.length) activeBotId = d.bots[0].id;
-    if (Object.keys(knownBots).length !== prev) renderBotTabs();
-    else renderBotTabs();
-    const bot = knownBots[activeBotId];
-    if (bot) applyStatus(bot);
-    else setOffline();
-  } catch(e) { setOffline(); }
-}
-
-function applyStatus(d) {
-  const online = d.online;
-  const badge = document.getElementById('online-badge');
-  badge.textContent = online ? 'ONLINE' : 'OFFLINE';
-  badge.className = 'header-badge' + (online ? ' online' : '');
-  document.getElementById('hdr-world').textContent = d.world || '—';
-  document.getElementById('stat-status').textContent = d.status || '—';
-  document.getElementById('stat-world').textContent  = d.world  || '—';
-  document.getElementById('stat-level').textContent  = d.level  || '—';
-  document.getElementById('stat-gems').textContent   = fmtNum(d.gems);
-  document.getElementById('live-x').textContent = d.x ?? '—';
-  document.getElementById('live-y').textContent = d.y ?? '—';
-
-  if (d.x !== botX || d.y !== botY) {
-    botX = d.x || 0; botY = d.y || 0;
-    // clear target marker saat bot gerak
-    lastTx = null; lastTy = null;
-    updateGridCoords();
-  }
-
-  // Update safety dari server (dikirim bot via status)
-  if (d.tileInfo && Array.isArray(d.tileInfo)) {
-    d.tileInfo.forEach(t => { safetyMap[`${t.x},${t.y}`] = t.safe; });
-    updateGridCoords();
   }
 }
 
-function setOffline() {
-  document.getElementById('online-badge').textContent = 'OFFLINE';
-  document.getElementById('online-badge').className = 'header-badge';
+async function poll(){
+  const t0 = performance.now();
+  try{
+    const r = await fetch(EP.bots(), { headers:hdr, cache:'no-store' });
+    bots = (await r.json()).bots || [];
+    if(!sel && bots.length) sel = bots[0].id;
+    $('hz').textContent = Math.round(performance.now() - t0) + ' ms';
+    render();
+  }catch(e){ $('hz').textContent = 'putus'; }
+  setTimeout(poll, POLL_MS);
 }
 
-// ── Toast ──────────────────────────────────────────────────────
-let toastTimer;
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>t.classList.remove('show'), 2500);
-}
+document.querySelectorAll('[data-d]').forEach(btn => btn.onclick = () => { const [x,y] = btn.dataset.d.split(',').map(Number); move(x, y); });
+$('use').onclick = () => targets().forEach(b => { send(b, 'use'); log(b.id + ' pakai'); });
+$('warp').onclick = () => { const w = $('world').value.trim().toUpperCase(); if(!w) return; targets().forEach(b => { send(b, 'warp', { world:w }); log(b.id + ' warp ke ' + w); }); };
+$('conn').onclick = () => targets().forEach(b => send(b, 'connect'));
+$('disc').onclick = () => targets().forEach(b => send(b, 'disconnect'));
+$('cfg-modfly').onchange = e => targets().forEach(b => send(b, 'modfly', { on:e.target.checked }));
+$('cfg-rec').onchange = e => targets().forEach(b => send(b, 'autoreconnect', { on:e.target.checked }));
 
-// ── Helpers ───────────────────────────────────────────────────
-function fmtNum(n) {
-  n = Number(n)||0;
-  if(n>=1e9) return (n/1e9).toFixed(2)+'B';
-  if(n>=1e6) return (n/1e6).toFixed(1)+'M';
-  if(n>=1e3) return (n/1e3).toFixed(0)+'K';
-  return n.toString();
-}
+const keys = { ArrowUp:'0,-1', w:'0,-1', ArrowDown:'0,1', s:'0,1', ArrowLeft:'-1,0', a:'-1,0', ArrowRight:'1,0', d:'1,0' };
+addEventListener('keydown', e => {
+  if(e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+  const k = keys[e.key]; if(k){ e.preventDefault(); const [x,y] = k.split(',').map(Number); move(x, y); }
+});
 
-const logBox = document.getElementById('log-box');
-function log(msg, cls='') {
-  const ts = new Date().toLocaleTimeString('id-ID',{hour12:false});
-  const line = document.createElement('div');
-  if(cls) line.className = cls;
-  line.textContent = `[${ts}] ${msg}`;
-  logBox.appendChild(line);
-  logBox.scrollTop = logBox.scrollHeight;
-  while(logBox.children.length > 300) logBox.removeChild(logBox.firstChild);
-}
-function clearLog(){ logBox.innerHTML=''; }
-
-// ── Init ──────────────────────────────────────────────────────
-buildGrid();
-pollBots();
-setInterval(pollBots, POLL_MS);
-log('ZAKIERA v2 ready','log-ok');
+log('Zakiera siap');
+poll();
 </script>
 </body>
 </html>
