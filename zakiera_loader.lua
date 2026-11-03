@@ -2,7 +2,7 @@
 -- Simpan file INI di Bothax
 -- Path: Android/media/com.rtsoft.growtopia/scripts/zakiera_loader.lua
 
-local URL = "https://raw.githubusercontent.com/AkhmadZaki14/zakiera/master/zakiera_bot.lua"
+local URL = "https://raw.githubusercontent.com/AkhmadZaki14/zakiera/hotfix-v6/zakiera_bot.lua"
 
 LogToConsole("`0[`6ZAKIERA`0] Downloading latest bot...")
 
