@@ -92,11 +92,11 @@ local function FetchAndExec()
     local body = type(resp) == "table" and resp.content or resp
     if type(body) ~= "string" or body == "" then return end
     Log("CMD body: " .. body:sub(1, 80))
-    for block in body:gmatch('%{[^{}]+%}') do
-        local t     = block:match('"type"%s*:%s*"([^"]+)"')
-        local px    = tonumber(block:match('"x"%s*:%s*(%-?%d+)'))
-        local py    = tonumber(block:match('"y"%s*:%s*(%-?%d+)'))
-        local world = block:match('"world"%s*:%s*"([^"]*)"')
+    -- Parse flat dari full body — ambil semua type/x/y/world langsung
+    for t, payload in body:gmatch('"type"%s*:%s*"([^"]+)".-"payload"%s*:%s*(%b{})') do
+        local px    = tonumber(payload:match('"x"%s*:%s*(%-?%d+)'))
+        local py    = tonumber(payload:match('"y"%s*:%s*(%-?%d+)'))
+        local world = payload:match('"world"%s*:%s*"([^"]*)"')
         if t == "move" and px and py then
             Log(string.format("Move → (%d,%d)", px, py))
             pcall(MoveTo, px, py)
