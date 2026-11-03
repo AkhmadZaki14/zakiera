@@ -1,5 +1,4 @@
-// zakiera backend v3 — multi-bot, stable
-// Fix: online threshold 15s, GET cmd update lastSeen, ghost bot1 cleanup
+// zakiera backend v4 — Vercel + Upstash Redis (stateful serverless)
 const express = require('express');
 const cors    = require('cors');
 const path    = require('path');
@@ -12,116 +11,126 @@ const PUBLIC_DIR = path.join('/Users/macbookpro/orca/projects/zakiera', 'public'
 app.use(express.static(PUBLIC_DIR));
 app.get('/', (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
-// ── Config ────────────────────────────────────────────────────
-const ONLINE_MS = 15000;  // was 5000 — toleransi ngrok spike + warp
-const PRUNE_MS  = 60000;  // hapus bot entry setelah 60s tidak ada kabar
+// ── Upstash Redis REST ────────────────────────────────────────
+const REDIS_URL   = process.env.UPSTASH_REDIS_URL   || 'https://loved-foxhound-247910.upstash.io';
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_TOKEN || 'gQAAAAAAA8hmAQIgcDI2YzUxMmYwMDg0OTA0ODYzYjdiY2FlMGNkOTM1OWI1Ng';
+const ONLINE_MS   = 15000;
 
-// ── State ─────────────────────────────────────────────────────
-const bots   = {};  // { botId: { ...fields, updatedAt } }
-const queues = {};  // { botId: [ cmd, ... ] }
-let cmdId = 1;
-
-function getBotId(req) {
-  // header wins, fallback body, fallback bot1
-  return (req.headers['x-bot-id'] || req.body?.botId || 'bot1').toString();
+async function redis(...args) {
+  const r = await fetch(REDIS_URL, {
+    method:  'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify(args),
+  });
+  const j = await r.json();
+  return j.result;
 }
 
-function isOnline(bot) {
-  return Date.now() - bot.updatedAt < ONLINE_MS;
-}
+// helpers
+const botKey   = id => `bot:${id}`;
+const queueKey = id => `queue:${id}`;
+const botsSet  = 'bots';
 
-// Hapus ghost "bot1" kalau sudah ada bot dengan nama asli
-function pruneGhost(realId) {
-  if (realId !== 'bot1' && bots['bot1'] && !isOnline(bots['bot1'])) {
-    delete bots['bot1'];
-    delete queues['bot1'];
-  }
+function isOnline(updatedAt) {
+  return Date.now() - updatedAt < ONLINE_MS;
 }
-
-// Prune bot lama tiap 30s
-setInterval(() => {
-  const now = Date.now();
-  for (const id of Object.keys(bots)) {
-    if (now - bots[id].updatedAt > PRUNE_MS) {
-      delete bots[id];
-      delete queues[id];
-    }
-  }
-}, 30000);
 
 // ── Bot: POST status ──────────────────────────────────────────
-app.post('/api/status', (req, res) => {
-  const id   = getBotId(req);
-  const b    = req.body || {};
-  const prev = bots[id] || {};
-  bots[id] = {
-    id,
-    x:         typeof b.x      === 'number' ? b.x      : (prev.x      || 0),
-    y:         typeof b.y      === 'number' ? b.y      : (prev.y      || 0),
-    world:     typeof b.world  === 'string' ? b.world  : (prev.world  || ''),
-    status:    typeof b.status === 'string' ? b.status : (prev.status || 'Online'),
-    level:     typeof b.level  === 'number' ? b.level  : (prev.level  || 0),
-    gems:      typeof b.gems   === 'number' ? b.gems   : (prev.gems   || 0),
-    uptime:    typeof b.uptime === 'number' ? b.uptime : (prev.uptime || 0),
-    updatedAt: Date.now(),
-    inventory: Array.isArray(b.inventory) ? b.inventory : (prev.inventory || []),
-    tileInfo:  Array.isArray(b.tileInfo)  ? b.tileInfo  : (prev.tileInfo  || []),
-  };
-  if (!queues[id]) queues[id] = [];
-  pruneGhost(id);
-  res.json({ ok: true });
+app.post('/api/status', async (req, res) => {
+  try {
+    const id = (req.headers['x-bot-id'] || req.body?.botId || 'bot1').toString();
+    const b  = req.body || {};
+    const now = Date.now();
+    const data = {
+      id,
+      x:         b.x         ?? 0,
+      y:         b.y         ?? 0,
+      world:     b.world     ?? '',
+      status:    b.status    ?? 'Online',
+      level:     b.level     ?? 0,
+      gems:      b.gems      ?? 0,
+      uptime:    b.uptime    ?? 0,
+      updatedAt: now,
+      inventory: JSON.stringify(b.inventory || []),
+      tileInfo:  JSON.stringify(b.tileInfo  || []),
+    };
+    await Promise.all([
+      redis('HSET', botKey(id), ...Object.entries(data).flat()),
+      redis('EXPIRE', botKey(id), 120),   // auto-expire 2 menit
+      redis('SADD', botsSet, id),
+    ]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Bot: GET command ──────────────────────────────────────────
-app.get('/api/command', (req, res) => {
-  const id = (req.headers['x-bot-id'] || req.query.botId || 'bot1').toString();
-  // GET command juga update lastSeen — biar bot tetap online saat status POST telat
-  if (bots[id]) bots[id].updatedAt = Date.now();
-  const cmds = (queues[id] || []).slice();
-  queues[id] = [];
-  res.json({ commands: cmds });
+app.get('/api/command', async (req, res) => {
+  try {
+    const id = (req.headers['x-bot-id'] || req.query.botId || 'bot1').toString();
+    // update lastSeen
+    await redis('HSET', botKey(id), 'updatedAt', Date.now());
+    // RPOP semua command dari queue (max 20)
+    const cmds = [];
+    for (let i = 0; i < 20; i++) {
+      const raw = await redis('LPOP', queueKey(id));
+      if (!raw) break;
+      try { cmds.push(JSON.parse(raw)); } catch {}
+    }
+    res.json({ commands: cmds });
+  } catch(e) { res.status(500).json({ commands: [] }); }
 });
 
 // ── Web: GET all bots ─────────────────────────────────────────
-app.get('/api/bots', (_req, res) => {
-  const list = Object.values(bots).map(b => ({ ...b, online: isOnline(b) }));
-  res.json({ bots: list });
-});
-
-// ── Web: GET single bot ───────────────────────────────────────
-app.get('/api/status', (req, res) => {
-  const id  = (req.query.botId || 'bot1').toString();
-  const bot = bots[id];
-  if (!bot) return res.json({ online:false, x:0, y:0, world:'', status:'Offline', level:0, gems:0, id });
-  res.json({ ...bot, online: isOnline(bot) });
+app.get('/api/bots', async (_req, res) => {
+  try {
+    const ids = await redis('SMEMBERS', botsSet);
+    if (!ids || !ids.length) return res.json({ bots: [] });
+    const bots = await Promise.all(ids.map(async id => {
+      const raw = await redis('HGETALL', botKey(id));
+      if (!raw || !raw.length) return null;
+      const obj = {};
+      for (let i = 0; i < raw.length; i += 2) obj[raw[i]] = raw[i+1];
+      if (!obj.updatedAt) return null;
+      return {
+        id,
+        x:         Number(obj.x)      || 0,
+        y:         Number(obj.y)      || 0,
+        world:     obj.world          || '',
+        status:    obj.status         || 'Online',
+        level:     Number(obj.level)  || 0,
+        gems:      Number(obj.gems)   || 0,
+        online:    isOnline(Number(obj.updatedAt)),
+        inventory: JSON.parse(obj.inventory || '[]'),
+        tileInfo:  JSON.parse(obj.tileInfo  || '[]'),
+      };
+    }));
+    // prune null + offline yang sudah lama
+    const live = bots.filter(Boolean);
+    res.json({ bots: live });
+  } catch(e) { res.status(500).json({ bots: [] }); }
 });
 
 // ── Web: POST command ─────────────────────────────────────────
-app.post('/api/command', (req, res) => {
-  const { type, payload, botId: bid } = req.body || {};
-  const id = (bid || 'bot1').toString();
-  if (!type) return res.status(400).json({ error: 'missing type' });
-  const VALID = ['move', 'warp', 'use', 'disconnect', 'connect', 'modfly'];
-  if (!VALID.includes(type)) return res.status(400).json({ error: 'unknown type' });
-  if (!queues[id]) queues[id] = [];
+app.post('/api/command', async (req, res) => {
+  try {
+    const { type, payload, botId: bid } = req.body || {};
+    const id = (bid || 'bot1').toString();
+    if (!type) return res.status(400).json({ error: 'missing type' });
+    const VALID = ['move', 'warp', 'use', 'disconnect', 'connect', 'modfly'];
+    if (!VALID.includes(type)) return res.status(400).json({ error: 'unknown type' });
 
-  // Deduplicate: kalau move ke koordinat sama sudah ada di queue, replace bukan tambah
-  if (type === 'move' && payload?.x !== undefined && payload?.y !== undefined) {
-    const existing = queues[id].findIndex(c => c.type === 'move');
-    if (existing !== -1) {
-      // replace last move command, jangan tumpuk
-      queues[id][existing] = { id: cmdId++, type, payload, createdAt: Date.now() };
-      return res.json({ ok: true, id: queues[id][existing].id });
+    // Untuk move: replace command lama di queue (dedup)
+    if (type === 'move') {
+      await redis('DEL', queueKey(id));
     }
-  }
-
-  const cmd = { id: cmdId++, type, payload: payload || {}, createdAt: Date.now() };
-  queues[id].push(cmd);
-  if (queues[id].length > 100) queues[id] = queues[id].slice(-100);
-  res.json({ ok: true, id: cmd.id });
+    const cmd = JSON.stringify({ type, payload: payload || {}, createdAt: Date.now() });
+    await redis('RPUSH', queueKey(id), cmd);
+    await redis('EXPIRE', queueKey(id), 60);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, bots: Object.keys(bots).length }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, redis: REDIS_URL }));
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, '0.0.0.0', () => console.log(`zakiera v3 :${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`zakiera v4 :${PORT}`));
