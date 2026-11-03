@@ -93,6 +93,9 @@ local function DoWarp(world)
 end
 
 -- ── POST status ───────────────────────────────────────────────
+local lastPx, lastPy = -1, -1
+local lastTileInfo = "[]"
+
 local function PostStatus()
     local me = GetLocal and GetLocal()
     local px, py, lvl = 0, 0, 0
@@ -111,12 +114,15 @@ local function PostStatus()
         local w = GetWorld()
         if w and w.name then world = w.name:upper() end
     end)
+    -- rebuild tileInfo hanya kalau posisi berubah
+    if px ~= lastPx or py ~= lastPy then
+        lastTileInfo = BuildTileInfo(px, py)
+        lastPx, lastPy = px, py
+    end
     local bid = GetBotId()
-    local tileInfo = BuildTileInfo(px, py)
     local body = string.format(
         '{"x":%d,"y":%d,"world":"%s","status":"Online","level":%d,"gems":%d,"uptime":0,"botId":"%s","tileInfo":%s}',
-        px, py, JsonEsc(world), lvl, gems, JsonEsc(bid), tileInfo)
-    -- header dibuat fresh tiap call — ID selalu up-to-date
+        px, py, JsonEsc(world), lvl, gems, JsonEsc(bid), lastTileInfo)
     pcall(MakeRequest, ZAKIERA_URL .. "/api/status", "POST", MakeHeaders(), body)
 end
 
@@ -150,16 +156,18 @@ end
 -- ── Main ──────────────────────────────────────────────────────
 Log("Zakiera v5 aktif → " .. ZAKIERA_URL)
 
+-- Status + tileInfo: tiap 1 detik (ringan)
 RunThread(function()
     while true do
         pcall(PostStatus)
-        Sleep(300)
+        Sleep(1000)
     end
 end)
 
+-- Command poll: tiap 400ms, tapi payload minimal
 RunThread(function()
     while true do
         pcall(FetchAndExec)
-        Sleep(300)
+        Sleep(400)
     end
 end)
