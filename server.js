@@ -104,6 +104,17 @@ app.post('/api/command', (req, res) => {
   const VALID = ['move', 'warp', 'use', 'disconnect', 'connect', 'modfly'];
   if (!VALID.includes(type)) return res.status(400).json({ error: 'unknown type' });
   if (!queues[id]) queues[id] = [];
+
+  // Deduplicate: kalau move ke koordinat sama sudah ada di queue, replace bukan tambah
+  if (type === 'move' && payload?.x !== undefined && payload?.y !== undefined) {
+    const existing = queues[id].findIndex(c => c.type === 'move');
+    if (existing !== -1) {
+      // replace last move command, jangan tumpuk
+      queues[id][existing] = { id: cmdId++, type, payload, createdAt: Date.now() };
+      return res.json({ ok: true, id: queues[id][existing].id });
+    }
+  }
+
   const cmd = { id: cmdId++, type, payload: payload || {}, createdAt: Date.now() };
   queues[id].push(cmd);
   if (queues[id].length > 100) queues[id] = queues[id].slice(-100);

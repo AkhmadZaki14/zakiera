@@ -136,7 +136,12 @@ async function send(bot, type, payload){
 
 // Gerak: base = pending target kalau ada, kalau tidak = posisi live bot
 // Pending TIDAK expire by time — hanya clear saat bot sudah sampai (cek di render)
+let _lastMove = 0;
 function move(dx, dy){
+  // debounce 150ms — cegah double click
+  const now = Date.now();
+  if (now - _lastMove < 150) return;
+  _lastMove = now;
   targets().forEach(b => {
     const p = pend[b.id];
     // pakai pending kalau ada, kalau tidak pakai posisi live
