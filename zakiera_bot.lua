@@ -1,10 +1,36 @@
 -- ============================================================
---  ZAKIERA BOT v5 — Standalone (Bothax Android)
---  Load via zakiera_loader.lua
+--  ZAKIERA BOT v6 — Standalone (Bothax Android)
+--  Fix: rate limit, bot ID cache, online threshold
+--  Rate: status 5s (12/mnt) + command 3s (20/mnt) = 32/mnt
 --  API List: io, MakeRequest
 -- ============================================================
 
-local ZAKIERA_URL = "https://43dc-118-99-118-190.ngrok-free.app"
+local ZAKIERA_URL      = "https://43dc-118-99-118-190.ngrok-free.app"
+local STATUS_INTERVAL  = 5000   -- 12/menit
+local COMMAND_INTERVAL = 3000   -- 20/menit
+local MAX_INV_ITEMS    = 50
+
+-- ── Bot ID cache — FIX #1 ────────────────────────────────────
+-- Jangan GetLocal() tiap request — cache nama, pakai saat nil (warp)
+local _cachedBotId = nil
+
+local function GetBotId()
+    local ok, me = pcall(GetLocal)
+    if ok and type(me) == "table" and me.name and me.name ~= "" then
+        _cachedBotId = me.name  -- update cache
+        return me.name
+    end
+    return _cachedBotId or "bot1"  -- pakai cache lama saat warp/nil
+end
+
+local function MakeHeaders()
+    return {
+        ["Content-Type"]               = "application/json",
+        ["ngrok-skip-browser-warning"] = "1",
+        ["User-Agent"]                 = "ZakieraBot/1.0",
+        ["x-bot-id"]                   = GetBotId(),
+    }
+end
 
 local function Log(msg)
     LogToConsole("`0[`6ZAKIERA`0] " .. tostring(msg))
@@ -17,26 +43,18 @@ local function JsonEsc(s)
     return s
 end
 
-local function GetBotId()
-    local me = GetLocal and GetLocal()
-    if type(me) == "table" and me.name and me.name ~= "" then
-        return me.name
-    end
-    return "bot1"
-end
-
-local function MakeHeaders()
-    return {
-        ["Content-Type"]               = "application/json",
-        ["ngrok-skip-browser-warning"] = "1",
-        ["User-Agent"]                 = "ZakieraBot/1.0",
-        ["x-bot-id"]                   = GetBotId(),
-    }
-end
-
 -- ── Modfly ON ─────────────────────────────────────────────────
 pcall(ChangeValue, "[C] ModFly", true)
 Log("ModFly ON")
+
+-- ── Safe HTTP helper ──────────────────────────────────────────
+local function SafeReq(url, method, body)
+    local ok, resp = pcall(MakeRequest, url, method, MakeHeaders(), body or "")
+    if not ok then return nil end
+    local content = type(resp) == "table" and (resp.content or "") or tostring(resp or "")
+    if content:find("<!DOCTYPE", 1, true) or content:find("<html", 1, true) then return nil end
+    return content
+end
 
 -- ── Tile safety ───────────────────────────────────────────────
 local function IsSafe(tx, ty)
@@ -44,24 +62,48 @@ local function IsSafe(tx, ty)
         local ok, r = pcall(CheckPath, tx, ty)
         if ok then return r == true end
     end
-    local t = GetTile and GetTile(tx, ty)
-    if not t then return false end
-    if t.collidable then return false end
-    return true
+    local ok, t = pcall(GetTile, tx, ty)
+    if ok and t then return not t.collidable end
+    return false
 end
 
-local function BuildTileInfo(cx, cy)
+-- Tile info — lazy, hanya rebuild saat posisi berubah
+local _lastTx, _lastTy = -1, -1
+local _lastTileJson = "[]"
+
+local function GetTileJson(px, py)
+    if px == _lastTx and py == _lastTy then return _lastTileJson end
+    _lastTx, _lastTy = px, py
     local arr = {}
     for dy = -2, 2 do
         for dx = -2, 2 do
-            if not (dx == 0 and dy == 0) then
-                local tx, ty = cx+dx, cy+dy
+            if not (dx==0 and dy==0) then
+                local tx, ty = px+dx, py+dy
                 arr[#arr+1] = string.format('{"x":%d,"y":%d,"safe":%s}',
                     tx, ty, IsSafe(tx,ty) and "true" or "false")
             end
         end
     end
-    return "[" .. table.concat(arr, ",") .. "]"
+    _lastTileJson = "[" .. table.concat(arr, ",") .. "]"
+    return _lastTileJson
+end
+
+-- ── Inventory — max 50, kirim id+amount saja (ringan) ────────
+local _lastInvJson  = "[]"
+local _invTick      = 0
+
+local function RebuildInv()
+    local ok, inv = pcall(GetInventory)
+    if not ok or not inv then return end
+    local arr, n = {}, 0
+    for _, item in pairs(inv) do
+        if n >= MAX_INV_ITEMS then break end
+        if item.id and item.amount and item.amount > 0 then
+            arr[#arr+1] = string.format('{"id":%d,"amount":%d}', item.id, item.amount)
+            n = n + 1
+        end
+    end
+    _lastInvJson = "[" .. table.concat(arr, ",") .. "]"
 end
 
 -- ── Movement ──────────────────────────────────────────────────
@@ -70,18 +112,17 @@ local function MoveTo(tx, ty)
         Log(string.format("BLOCKED (%d,%d)", tx, ty))
         return
     end
-    local me = GetLocal and GetLocal()
-    if not me or not me.pos then return end
+    local ok, me = pcall(GetLocal)
+    if not ok or not me or not me.pos then return end
     if math.floor(me.pos.x/32) == tx and math.floor(me.pos.y/32) == ty then return end
     FindPath(tx, ty)
     Log(string.format("Move (%d,%d)", tx, ty))
 end
 
 local function DoUse()
-    local me = GetLocal and GetLocal()
-    if not me or not me.pos then return end
-    local px = math.floor(me.pos.x/32)
-    local py = math.floor(me.pos.y/32)
+    local ok, me = pcall(GetLocal)
+    if not ok or not me or not me.pos then return end
+    local px, py = math.floor(me.pos.x/32), math.floor(me.pos.y/32)
     SendPacketRaw(false, {type=3,state=0,value=18,px=px,py=py,x=px*32,y=py*32})
 end
 
@@ -92,76 +133,9 @@ local function DoWarp(world)
     Log("Warp " .. world)
 end
 
--- ── POST status ───────────────────────────────────────────────
-local lastPx, lastPy = -1, -1
-local lastTileInfo = "[]"
-local lastInvJson  = "[]"
-local invTick      = 0
-
-local function BuildInvJson()
-    local arr = {}
-    pcall(function()
-        local inv = GetInventory()
-        if not inv then return end
-        for _, item in pairs(inv) do
-            if item.id and item.amount and item.amount > 0 then
-                local name = ""
-                pcall(function()
-                    local info = GetItemInfo(item.id)
-                    if info and info.name then name = info.name end
-                end)
-                arr[#arr+1] = string.format('{"id":%d,"name":"%s","amount":%d}',
-                    item.id, JsonEsc(name), item.amount)
-            end
-        end
-    end)
-    return "[" .. table.concat(arr, ",") .. "]"
-end
-
-local function PostStatus()
-    local me = GetLocal and GetLocal()
-    local px, py, lvl = 0, 0, 0
-    if type(me) == "table" and me.pos then
-        px  = math.floor(me.pos.x/32)
-        py  = math.floor(me.pos.y/32)
-        lvl = me.level or 0
-    end
-    local gems = 0
-    pcall(function()
-        local info = GetPlayerInfo()
-        if info then gems = info.gems or 0 end
-    end)
-    local world = ""
-    pcall(function()
-        local w = GetWorld()
-        if w and w.name then world = w.name:upper() end
-    end)
-    -- rebuild tileInfo hanya kalau posisi berubah
-    if px ~= lastPx or py ~= lastPy then
-        lastTileInfo = BuildTileInfo(px, py)
-        lastPx, lastPy = px, py
-    end
-    -- rebuild inventory tiap 5 detik (tiap 5 tick × 1s)
-    invTick = invTick + 1
-    if invTick >= 5 then
-        lastInvJson = BuildInvJson()
-        invTick = 0
-    end
-    local bid = GetBotId()
-    local body = string.format(
-        '{"x":%d,"y":%d,"world":"%s","status":"Online","level":%d,"gems":%d,"uptime":0,"botId":"%s","tileInfo":%s,"inventory":%s}',
-        px, py, JsonEsc(world), lvl, gems, JsonEsc(bid), lastTileInfo, lastInvJson)
-    pcall(MakeRequest, ZAKIERA_URL .. "/api/status", "POST", MakeHeaders(), body)
-end
-
--- ── GET & exec command ────────────────────────────────────────
-local function FetchAndExec()
-    local hdrs = MakeHeaders()
-    local ok, resp = pcall(MakeRequest, ZAKIERA_URL .. "/api/command", "GET", hdrs, "")
-    if not ok then return end
-    local body = type(resp) == "table" and (resp.content or "") or tostring(resp or "")
-    if body == "" or body:find("<!DOCTYPE", 1, true) or body:find("<html", 1, true) then return end
-
+-- ── Exec command ──────────────────────────────────────────────
+local function ExecCmds(body)
+    if not body or body == "" then return end
     for t, payload in body:gmatch('"type"%s*:%s*"([^"]+)".-"payload"%s*:%s*(%b{})') do
         if t == "move" then
             local x = tonumber(payload:match('"x"%s*:%s*(%-?%d+)'))
@@ -181,21 +155,50 @@ local function FetchAndExec()
     end
 end
 
--- ── Main ──────────────────────────────────────────────────────
-Log("Zakiera v5 aktif → " .. ZAKIERA_URL)
-
--- Status + tileInfo: tiap 1 detik (ringan)
+-- ── Status POST thread (5s = 12/menit) ───────────────────────
 RunThread(function()
     while true do
-        pcall(PostStatus)
-        Sleep(1000)
+        local ok, me = pcall(GetLocal)
+        local px, py, lvl = 0, 0, 0
+        if ok and type(me) == "table" and me.pos then
+            px  = math.floor(me.pos.x/32)
+            py  = math.floor(me.pos.y/32)
+            lvl = me.level or 0
+        end
+
+        local gems = 0
+        pcall(function()
+            local info = GetPlayerInfo()
+            if info then gems = info.gems or 0 end
+        end)
+
+        local world = ""
+        pcall(function()
+            local w = GetWorld()
+            if w and w.name then world = w.name:upper() end
+        end)
+
+        -- Rebuild inventory tiap 3 tick (15 detik)
+        _invTick = _invTick + 1
+        if _invTick >= 3 then pcall(RebuildInv); _invTick = 0 end
+
+        local tileJson = GetTileJson(px, py)
+        local body = string.format(
+            '{"x":%d,"y":%d,"world":"%s","status":"Online","level":%d,"gems":%d,"uptime":0,"botId":"%s","tileInfo":%s,"inventory":%s}',
+            px, py, JsonEsc(world), lvl, gems, JsonEsc(GetBotId()), tileJson, _lastInvJson)
+
+        SafeReq(ZAKIERA_URL .. "/api/status", "POST", body)
+        Sleep(STATUS_INTERVAL)
     end
 end)
 
--- Command poll: tiap 400ms, tapi payload minimal
+-- ── Command GET thread (3s = 20/menit) ───────────────────────
 RunThread(function()
     while true do
-        pcall(FetchAndExec)
-        Sleep(400)
+        local resp = SafeReq(ZAKIERA_URL .. "/api/command", "GET", nil)
+        if resp then pcall(ExecCmds, resp) end
+        Sleep(COMMAND_INTERVAL)
     end
 end)
+
+Log("Zakiera v6 aktif | status 5s | cmd 3s | rate ~32/mnt")
