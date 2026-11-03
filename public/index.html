@@ -186,12 +186,6 @@ $('disc').onclick = () => targets().forEach(b => send(b, 'disconnect'));
 $('cfg-modfly').onchange = e => targets().forEach(b => send(b, 'modfly', { on:e.target.checked }));
 $('cfg-rec').onchange = e => targets().forEach(b => send(b, 'autoreconnect', { on:e.target.checked }));
 
-const keys = { ArrowUp:'0,-1', w:'0,-1', ArrowDown:'0,1', s:'0,1', ArrowLeft:'-1,0', a:'-1,0', ArrowRight:'1,0', d:'1,0' };
-addEventListener('keydown', e => {
-  if(e.target.tagName === 'INPUT' && e.target.type === 'text') return;
-  const k = keys[e.key]; if(k){ e.preventDefault(); const [x,y] = k.split(',').map(Number); move(x, y); }
-});
-
 log('Zakiera siap');
 poll();
 </script>
